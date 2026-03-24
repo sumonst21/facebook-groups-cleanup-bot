@@ -26,8 +26,11 @@ async function run() {
             
             // Find all unmarked "..." More options buttons
             // On /groups/joins/ they have aria-label="More"
-            const dotsBtns = Array.from(document.querySelectorAll('div[aria-label="More"]'))
-                            .filter(b => b.offsetHeight > 0 && !b.hasAttribute('data-leave-processed'));
+            const dotsBtns = Array.from(document.querySelectorAll('div[aria-label="More"], div[aria-label="More options"]'))
+                            .filter(b => {
+                                const rect = b.getBoundingClientRect();
+                                return rect.width > 0 && rect.height > 0 && !b.hasAttribute('data-leave-processed');
+                            });
                             
             if (dotsBtns.length === 0) {
                 window.scrollBy(0, window.innerHeight);
@@ -93,18 +96,23 @@ async function run() {
             emptyScrolls++;
             console.log(`No unprocessed groups found in view. Scrolled down... (Attempt ${emptyScrolls})`);
             
-            if (emptyScrolls >= 5) {
-                console.log("End of groups list reached or stuck. Refreshing page to reload virtual DOM...");
-                await page.reload({ waitUntil: 'domcontentloaded' });
-                await new Promise(r => setTimeout(r, 6000));
+            if (emptyScrolls >= 10) {
+                console.log("End of groups list reached. We have processed all loaded groups.");
                 emptyScrolls = 0;
             }
         } else {
             emptyScrolls = 0;
             totalLeft += result.left;
             console.log(`Processed batch. Successfully left ${result.left} groups. Total for session: ${totalLeft}`);
-            // Small jitter between batches
-            await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
+            
+            if (totalLeft > 0 && totalLeft % 100 === 0) {
+                console.log("Reached 100 groups milestone. Reloading the page to keep memory light...");
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                await new Promise(r => setTimeout(r, 6000));
+            } else {
+                // Small jitter between batches
+                await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
+            }
         }
     }
 }

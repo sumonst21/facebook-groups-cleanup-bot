@@ -22,8 +22,20 @@ for (let i = 2; i < process.argv.length; i++) {
 
 async function run() {
     console.log(`Starting bot in mode: ${mode}` + (mode !== 'all' ? ` ${targetCount}` : ''));
-    console.log(`Connecting to browser at http://localhost:9222...`);
-    const browser = await puppeteer.connect({ browserURL: 'http://localhost:9222', defaultViewport: null });
+    let browser;
+    try {
+        console.log(`Trying to connect to browser at http://127.0.0.1:9222...`);
+        browser = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9222', defaultViewport: null });
+    } catch (e) {
+        console.log(`Connection failed. Launching /opt/google/chrome/chrome locally with user data...`);
+        browser = await puppeteer.launch({
+            executablePath: '/opt/google/chrome/chrome',
+            userDataDir: '/home/sumonst21/.config/google-chrome',
+            defaultViewport: null,
+            headless: "new",
+            args: ['--no-sandbox']
+        });
+    }
     
     // Load existing report to avoid reprocessing
     let report = [];
@@ -185,22 +197,28 @@ async function run() {
                         // Heavy random human jitter (3 to 6 seconds)
                         await sleep(3000 + Math.random() * 3000);
                         
-                        const joinedBtn = document.querySelector('div[aria-label="Joined"]');
-                        if (!joinedBtn) {
-                            if (document.querySelector('div[aria-label="Join Group"]') || document.querySelector('div[aria-label="Join community"]')) {
-                                return 'Success'; // We are already not in it
+                        let leaveItem = null;
+                        for (let clickAttempt = 0; clickAttempt < 3; clickAttempt++) {
+                            const joinedBtn = document.querySelector('div[aria-label="Joined"]');
+                            if (!joinedBtn) {
+                                if (document.querySelector('div[aria-label="Join Group"]') || document.querySelector('div[aria-label="Join community"]')) {
+                                    return 'Success'; // We are already not in it
+                                }
+                                return 'No Joined button';
                             }
-                            return 'No Joined button';
+                            joinedBtn.click();
+                            
+                            // Wait for dropdown
+                            await sleep(2000 + Math.random() * 1500);
+                            const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], span[dir="auto"]'));
+                            leaveItem = menuItems.find(el => {
+                                const txt = (el.innerText || '').toLowerCase();
+                                return txt.includes('leave group') || txt.includes('leave community');
+                            });
+                            if (leaveItem) break;
+                            await sleep(1000); // small delay before retry
                         }
-                        joinedBtn.click();
                         
-                        // Wait for dropdown
-                        await sleep(2000 + Math.random() * 1500);
-                        const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], span[dir="auto"]'));
-                        const leaveItem = menuItems.find(el => {
-                            const txt = (el.innerText || '').toLowerCase();
-                            return txt.includes('leave group') || txt.includes('leave community');
-                        });
                         if (!leaveItem) return 'No Leave group menu item';
                         leaveItem.click();
                         
