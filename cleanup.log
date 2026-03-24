@@ -1,0 +1,14 @@
+Connecting to browser at http://localhost:9222...
+Navigating to groups list on Main Page...
+
+--- Collecting new batch of groups... ---
+Queueing 25 groups for concurrent processing...
+[Worker 1] Processing Unknown (38 members)
+[Worker 2] Processing Unknown (3000 members)
+[Worker 3] Processing Unknown (799 members)
+[Worker 1] -> Error: No Joined button
+[Worker 1] Processing Unknown (156 members)
+[Worker 2] -> Successfully left Unknown!
+[Worker 2] Processing Unknown (369 members)
+[Worker 3] -> Successfully left Unknown!
+[Worker 3] Processing Unknown (938 members)
