@@ -117,19 +117,32 @@ async function run() {
             }
 
             if (groupsToLeave.length < CONCURRENT_WORKERS * 5) {
-                await mainPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+                await mainPage.evaluate(() => {
+                    const links = document.querySelectorAll('a[href*="/members/"]');
+                    if (links.length > 0) {
+                        links[links.length - 1].scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    } else {
+                        window.scrollBy(0, 3000);
+                    }
+                });
                 await new Promise(r => setTimeout(r, 4000));
             }
         }
 
         if (groupsToLeave.length === 0) {
             consecutiveEmptyScrolls++;
-            if (consecutiveEmptyScrolls >= 3) {
+            if (consecutiveEmptyScrolls >= 4) {
                 console.log("No new eligible groups found after extensive scrolling. Finite end reached.");
                 break;
             }
-            console.log("No new eligible groups in this scroll, trying again...");
-            await mainPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+            console.log(`No new eligible groups in this scroll (attempt ${consecutiveEmptyScrolls}/4), scrolling down...`);
+            await mainPage.evaluate(() => {
+                const links = document.querySelectorAll('a[href*="/members/"]');
+                if (links.length > 0) {
+                    links[links.length - 1].scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }
+                window.scrollBy(0, 3000); // Fallback force scroll
+            });
             await new Promise(r => setTimeout(r, 5000));
             continue;
         }
