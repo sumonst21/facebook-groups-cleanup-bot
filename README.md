@@ -23,7 +23,25 @@ Start the bot locally:
 ```bash
 node leave_bot.js
 ```
-The script will run continuously until all groups under the target member limit are processed.
+
+By default, the script targets groups with **fewer than 10,000 members**. You can control this behavior using command line parameters:
+
+- **Leave all groups**:
+  ```bash
+  node leave_bot.js --all
+  ```
+- **Leave groups with fewer than X members**:
+  ```bash
+  node leave_bot.js --less-than 5000
+  ```
+  *(or use `-l 5000`)*
+- **Leave groups with more than X members**:
+  ```bash
+  node leave_bot.js --greater-than 100000
+  ```
+  *(or use `-g 100000`)*
+
+The script will run continuously using 3 concurrent tabs until all matching groups are processed and will log progress to `cleanup.log`.
 
 ## Note
 Ensure your terminal session has active permissions to the debugging port, and avoid interfering with the spawned background tabs during execution.

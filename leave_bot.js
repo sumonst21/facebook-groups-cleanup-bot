@@ -2,10 +2,26 @@ const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 
 const CONCURRENT_WORKERS = 3;
-const TARGET_MEMBERS = 10000;
 const REPORT_PATH = '/home/sumonst21/leave-fb-groups/cleanup_report.json';
 
+let mode = 'less-than';
+let targetCount = 10000;
+
+for (let i = 2; i < process.argv.length; i++) {
+    const arg = process.argv[i];
+    if (arg === '--all') {
+        mode = 'all';
+    } else if (arg === '--less-than' || arg === '-l') {
+        mode = 'less-than';
+        targetCount = parseInt(process.argv[++i], 10);
+    } else if (arg === '--greater-than' || arg === '-g') {
+        mode = 'greater-than';
+        targetCount = parseInt(process.argv[++i], 10);
+    }
+}
+
 async function run() {
+    console.log(`Starting bot in mode: ${mode}` + (mode !== 'all' ? ` ${targetCount}` : ''));
     console.log(`Connecting to browser at http://localhost:9222...`);
     const browser = await puppeteer.connect({ browserURL: 'http://localhost:9222', defaultViewport: null });
     
@@ -42,7 +58,7 @@ async function run() {
         
         while (groupsToLeave.length < CONCURRENT_WORKERS * 5 && scrolls < 10) {
             scrolls++;
-            const groups = await mainPage.evaluate(() => {
+            const groups = await mainPage.evaluate(({ mode, targetCount }) => {
                 function parseMembers(text) {
                     if (!text) return 0;
                     const matches = text.match(/([\d.]+)([KM]?)/i);
@@ -79,12 +95,19 @@ async function run() {
                     const memberCountText = memberNode ? memberNode.innerText : '0';
                     const memberCount = parseMembers(memberCountText);
 
-                    if (memberCount < 10000 && url.includes('/groups/')) {
-                        results.push({ name, url, members: memberCount });
+                    if (url.includes('/groups/')) {
+                        let shouldLeave = false;
+                        if (mode === 'all') shouldLeave = true;
+                        else if (mode === 'less-than' && memberCount < targetCount) shouldLeave = true;
+                        else if (mode === 'greater-than' && memberCount > targetCount) shouldLeave = true;
+                        
+                        if (shouldLeave) {
+                            results.push({ name, url, members: memberCount });
+                        }
                     }
                 }
                 return results;
-            });
+            }, { mode, targetCount });
 
             // Filter out ones we've already processed or plan to
             for (const g of groups) {
