@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 
-const CONCURRENT_WORKERS = 3;
+const CONCURRENT_WORKERS = 2;
 const REPORT_PATH = '/home/sumonst21/leave-fb-groups/cleanup_report.json';
 
 let mode = 'less-than';
@@ -161,11 +161,13 @@ async function run() {
         let localLeftGroups = [];
         let queue = [...groupsToLeave];
 
-        // Worker Loop
+        // Worker Loop - Heavily throttled to evade Facebook Action Blocks
         async function workerTask(workerPage, workerId) {
+            // Stagger parallel workers so they don't fire at the same millisecond
+            await new Promise(r => setTimeout(r, workerId * 4000));
+            
             while (queue.length > 0) {
                 const group = queue.shift();
-                // Mark as processed regardless of success so we don't infinitely retry broken ones this session
                 processedUrls.add(group.url); 
                 
                 console.log(`[Worker ${workerId}] Processing ${group.name} (${group.members} members)`);
@@ -175,28 +177,45 @@ async function run() {
                     const result = await workerPage.evaluate(async () => {
                         const sleep = ms => new Promise(r => setTimeout(r, ms));
                         
-                        await sleep(3000);
+                        // Check for hard action block modal
+                        if (document.body.innerText.includes("Action Blocked") || document.body.innerText.includes("You can't use this feature right now")) {
+                            return 'Action Blocked';
+                        }
+                        
+                        // Heavy random human jitter (3 to 6 seconds)
+                        await sleep(3000 + Math.random() * 3000);
+                        
                         const joinedBtn = document.querySelector('div[aria-label="Joined"]');
-                        if (!joinedBtn) return 'No Joined button';
+                        if (!joinedBtn) {
+                            if (document.querySelector('div[aria-label="Join Group"]') || document.querySelector('div[aria-label="Join community"]')) {
+                                return 'Success'; // We are already not in it
+                            }
+                            return 'No Joined button';
+                        }
                         joinedBtn.click();
                         
-                        await sleep(2000);
-                        const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"]'));
-                        const leaveItem = menuItems.find(el => el.innerText && el.innerText.includes('Leave group'));
+                        // Wait for dropdown
+                        await sleep(2000 + Math.random() * 1500);
+                        const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], span[dir="auto"]'));
+                        const leaveItem = menuItems.find(el => {
+                            const txt = (el.innerText || '').toLowerCase();
+                            return txt.includes('leave group') || txt.includes('leave community');
+                        });
                         if (!leaveItem) return 'No Leave group menu item';
                         leaveItem.click();
                         
-                        await sleep(2000);
+                        // Wait for confirm modal
+                        await sleep(2000 + Math.random() * 1500);
                         const btns = Array.from(document.querySelectorAll('div[role="button"], span'));
                         const confirmBtn = btns.find(el => {
-                            const txt = (el.innerText || '').trim();
-                            const label = el.getAttribute('aria-label') || '';
-                            return txt === 'Leave Group' || txt === 'Leave group' || txt === 'Leave' || label === 'Leave Group';
+                            const txt = (el.innerText || '').trim().toLowerCase();
+                            const label = (el.getAttribute('aria-label') || '').toLowerCase();
+                            return txt === 'leave group' || txt === 'leave community' || txt === 'leave' || label === 'leave group' || label === 'leave community';
                         });
                         if (!confirmBtn) return 'No Confirm button';
                         confirmBtn.click();
                         
-                        await sleep(2000);
+                        await sleep(2000 + Math.random() * 1000);
                         return 'Success';
                     });
                     
@@ -205,6 +224,10 @@ async function run() {
                         console.log(`[Worker ${workerId}] -> Successfully left ${group.name}!`);
                     } else {
                         console.log(`[Worker ${workerId}] -> Error: ${result}`);
+                        await workerPage.screenshot({ path: `/home/sumonst21/leave-fb-groups/debug_${workerId}_${Date.now()}.png` }).catch(()=>{});
+                        if (result === 'Action Blocked') {
+                            console.log(`\n\n[!!!] FACEBOOK HAS TEMPORARILY BLOCKED YOUR ACCOUNT FROM LEAVING GROUPS DUE TO RATE LIMITS.\n`);
+                        }
                     }
                 } catch (err) {
                     console.log(`[Worker ${workerId}] -> Exception: ${err.message}`);
