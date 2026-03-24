@@ -53,6 +53,9 @@ async function run() {
 
     while (true) {
         console.log(`\n--- Collecting new batch of groups... ---`);
+        let groupsToLeave = [];
+        let scrolls = 0;
+        
         while (groupsToLeave.length < CONCURRENT_WORKERS * 5 && scrolls < 20) {
             scrolls++;
             const groups = await mainPage.evaluate(({ mode, targetCount }) => {
