@@ -71,8 +71,20 @@ async function run() {
                     if (confirmBtn) {
                         confirmBtn.click();
                         leftCount++;
-                        // Wait for the modal dismissal to complete
+                        // Wait for the modal dismissal to complete or for "Report this group" modal to appear
                         await sleep(2500 + Math.random() * 1500);
+                        
+                        // Handle secondary "Left group / Report this group" modal
+                        const postLeaveClose = Array.from(document.querySelectorAll('div[aria-label="Close"], div[aria-label="Cancel"], div[role="button"], span[dir="auto"]')).find(b => {
+                            const lbl = (b.getAttribute('aria-label') || '').toLowerCase();
+                            const txt = (b.innerText || '').trim().toLowerCase();
+                            const rect = b.getBoundingClientRect();
+                            return (lbl === 'close' || lbl === 'cancel' || txt === 'done' || txt === 'close' || txt === 'cancel') && rect.width > 0;
+                        });
+                        if (postLeaveClose) {
+                            postLeaveClose.click();
+                            await sleep(1500);
+                        }
                     } else {
                         // Close modal cleanly if 'Confirm' isn't there
                         const closeBtns = Array.from(document.querySelectorAll('div[aria-label="Close"], div[aria-label="Cancel"]'));
