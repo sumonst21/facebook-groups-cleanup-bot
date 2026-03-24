@@ -43,5 +43,13 @@ By default, the script targets groups with **fewer than 10,000 members**. You ca
 
 The script will run continuously using 3 concurrent tabs until all matching groups are processed and will log progress to `cleanup.log`.
 
+## Alternative Modal Script (Anti-Ban)
+
+If Facebook temporarily limits your account from leaving groups via individual group pages, you can use the centralized Membership Settings Modal script:
+```bash
+node leave_modal_bot.js
+```
+This single-tab script automatically navigates to `https://www.facebook.com/groups/feed`, opens the `Groups Settings -> Membership` modal, and processes all your groups natively from the list UI without hitting rate limitations as quickly.
+
 ## Note
 Ensure your terminal session has active permissions to the debugging port, and avoid interfering with the spawned background tabs during execution.
