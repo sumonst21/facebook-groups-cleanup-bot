@@ -53,10 +53,7 @@ async function run() {
 
     while (true) {
         console.log(`\n--- Collecting new batch of groups... ---`);
-        let groupsToLeave = [];
-        let scrolls = 0;
-        
-        while (groupsToLeave.length < CONCURRENT_WORKERS * 5 && scrolls < 10) {
+        while (groupsToLeave.length < CONCURRENT_WORKERS * 5 && scrolls < 20) {
             scrolls++;
             const groups = await mainPage.evaluate(({ mode, targetCount }) => {
                 function parseMembers(text) {
@@ -75,7 +72,7 @@ async function run() {
                 document.querySelectorAll('a[href*="/members/"]').forEach(memberLink => {
                     let parent = memberLink.parentElement;
                     while (parent && parent !== document.body) {
-                        if (parent.querySelector('a[role="link"]')) {
+                        if (parent.querySelector('a[role="link"]') && parent.querySelector('a[role="link"]').href.includes('/groups/')) {
                             let cardContainer = parent.parentElement ? parent.parentElement : parent;
                             cardContainer = cardContainer.parentElement ? cardContainer.parentElement : cardContainer;
                             cardsMap.set(cardContainer, cardContainer);
@@ -86,9 +83,8 @@ async function run() {
                 });
 
                 for (const card of cardsMap.values()) {
-                    const nameNode = card.querySelector('a[role="link"] span');
-                    const name = nameNode ? nameNode.innerText : 'Unknown';
-                    const linkNode = card.querySelector('a[role="link"]');
+                    const linkNode = Array.from(card.querySelectorAll('a[role="link"]')).find(a => a.href.includes('/groups/'));
+                    const name = linkNode ? (linkNode.innerText || linkNode.textContent).trim().split('\n')[0] : 'Unknown';
                     const url = linkNode ? linkNode.href : '';
                     
                     const memberNode = card.querySelector('a[href*="/members/"]');
@@ -101,8 +97,11 @@ async function run() {
                         else if (mode === 'less-than' && memberCount < targetCount) shouldLeave = true;
                         else if (mode === 'greater-than' && memberCount > targetCount) shouldLeave = true;
                         
+                        // Extract base group ID for deduplication
+                        const cleanUrl = url.split('?')[0];
+
                         if (shouldLeave) {
-                            results.push({ name, url, members: memberCount });
+                            results.push({ name, url: cleanUrl, members: memberCount });
                         }
                     }
                 }
@@ -117,33 +116,39 @@ async function run() {
             }
 
             if (groupsToLeave.length < CONCURRENT_WORKERS * 5) {
-                await mainPage.evaluate(() => {
-                    const links = document.querySelectorAll('a[href*="/members/"]');
-                    if (links.length > 0) {
-                        links[links.length - 1].scrollIntoView({ behavior: 'smooth', block: 'end' });
-                    } else {
-                        window.scrollBy(0, 3000);
-                    }
-                });
-                await new Promise(r => setTimeout(r, 4000));
+                // Use human-like keyboard scrolling
+                await mainPage.focus('body').catch(() => {});
+                for(let k=0; k<10; k++) {
+                    await mainPage.keyboard.press('PageDown');
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                await new Promise(r => setTimeout(r, 3000));
             }
         }
 
         if (groupsToLeave.length === 0) {
             consecutiveEmptyScrolls++;
-            if (consecutiveEmptyScrolls >= 4) {
-                console.log("No new eligible groups found after extensive scrolling. Finite end reached.");
-                break;
-            }
-            console.log(`No new eligible groups in this scroll (attempt ${consecutiveEmptyScrolls}/4), scrolling down...`);
-            await mainPage.evaluate(() => {
-                const links = document.querySelectorAll('a[href*="/members/"]');
-                if (links.length > 0) {
-                    links[links.length - 1].scrollIntoView({ behavior: 'smooth', block: 'end' });
+            if (consecutiveEmptyScrolls >= 3) {
+                console.log("No new eligible groups found. Performing a hard refresh of the page to clear left groups from the DOM...");
+                await mainPage.reload({ waitUntil: 'domcontentloaded' });
+                await new Promise(r => setTimeout(r, 5000));
+                consecutiveEmptyScrolls = 0; // reset to try again post-reload
+                // If it still loops after reload and finds nothing, we will add a hard bailout counter if needed.
+                // But let's check if the page actually has groups via DOM:
+                const hasGroups = await mainPage.evaluate(() => document.querySelectorAll('a[href*="/groups/"]').length > 0);
+                if (!hasGroups) {
+                    console.log("Groups page completely empty. Finite end reached.");
+                    break;
                 }
-                window.scrollBy(0, 3000); // Fallback force scroll
-            });
-            await new Promise(r => setTimeout(r, 5000));
+                continue;
+            }
+            console.log(`No new eligible groups in this scroll (attempt ${consecutiveEmptyScrolls}/3), scrolling further...`);
+            await mainPage.focus('body').catch(() => {});
+            for(let k=0; k<20; k++) {
+                await mainPage.keyboard.press('PageDown');
+                await new Promise(r => setTimeout(r, 100));
+            }
+            await new Promise(r => setTimeout(r, 4000));
             continue;
         }
 
